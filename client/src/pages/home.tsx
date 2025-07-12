@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search, Calendar } from "lucide-react";
+import { Search, Calendar, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Navbar from "@/components/navbar";
 import UserCard from "@/components/user-card";
@@ -11,6 +12,15 @@ import SwapRequestModal from "@/components/swap-request-modal";
 import Chatbot from "@/components/chatbot";
 import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+
+const AVAILABILITY_OPTIONS = [
+  { value: "weekday-mornings", label: "Weekday Mornings" },
+  { value: "weekday-afternoons", label: "Weekday Afternoons" },
+  { value: "weekday-evenings", label: "Weekday Evenings" },
+  { value: "weekend-mornings", label: "Weekend Mornings" },
+  { value: "weekend-afternoons", label: "Weekend Afternoons" },
+  { value: "weekend-evenings", label: "Weekend Evenings" }
+];
 
 interface UserWithSkills {
   id: number;
@@ -28,6 +38,7 @@ export default function Home() {
   const [selectedUser, setSelectedUser] = useState<UserWithSkills | null>(null);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+  const [selectedAvailability, setSelectedAvailability] = useState<string[]>([]);
   const { toast } = useToast();
 
   const { data: currentUser } = useQuery({
@@ -37,10 +48,15 @@ export default function Home() {
   });
 
   const { data: usersData, isLoading } = useQuery({
-    queryKey: ["/api/users", searchQuery],
+    queryKey: ["/api/users", searchQuery, selectedAvailability],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
+      if (selectedAvailability.length > 0) {
+        selectedAvailability.forEach(availability => {
+          params.append("availability", availability);
+        });
+      }
       
       const response = await fetch(`/api/users?${params}`);
       if (!response.ok) throw new Error("Failed to fetch users");
@@ -49,15 +65,19 @@ export default function Home() {
   });
 
   const handleAvailabilityClick = () => {
-    if (!currentUser) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to check availability and request swaps.",
-        variant: "destructive",
-      });
+    setShowAvailabilityModal(true);
+  };
+
+  const handleAvailabilityChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setSelectedAvailability([...selectedAvailability, value]);
     } else {
-      setShowAvailabilityModal(true);
+      setSelectedAvailability(selectedAvailability.filter(item => item !== value));
     }
+  };
+
+  const clearAvailabilityFilter = () => {
+    setSelectedAvailability([]);
   };
 
   const handleRequestSwap = (user: UserWithSkills) => {
@@ -98,11 +118,25 @@ export default function Home() {
                 onClick={handleAvailabilityClick}
                 className="flex items-center space-x-2"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                </svg>
+                <Calendar className="w-5 h-5" />
                 <span>Availability</span>
+                {selectedAvailability.length > 0 && (
+                  <span className="bg-blue-600 text-white text-xs rounded-full px-2 py-1 ml-2">
+                    {selectedAvailability.length}
+                  </span>
+                )}
               </Button>
+              {selectedAvailability.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAvailabilityFilter}
+                  className="flex items-center space-x-1 text-slate-600 hover:text-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Clear Filter</span>
+                </Button>
+              )}
             </div>
 
             <div className="flex-1 max-w-md">
@@ -169,30 +203,44 @@ export default function Home() {
       <Dialog open={showAvailabilityModal} onOpenChange={setShowAvailabilityModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Your Availability</DialogTitle>
+            <DialogTitle>Filter by Availability</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p className="text-slate-600 mb-4">
-              Set your availability to let others know when you're free for skill swaps.
+              Filter users by their available time slots for skill swaps.
             </p>
             <div className="space-y-3">
-              <div className="text-sm font-medium text-slate-700">Available time slots:</div>
-              <div className="grid grid-cols-2 gap-2">
-                {['Weekday Mornings', 'Weekday Afternoons', 'Weekday Evenings', 'Weekend Mornings', 'Weekend Afternoons', 'Weekend Evenings'].map((slot) => (
-                  <Button
-                    key={slot}
-                    variant="outline"
-                    size="sm"
-                    className="text-left justify-start"
-                  >
-                    {slot}
-                  </Button>
+              <div className="text-sm font-medium text-slate-700">Select time slots:</div>
+              <div className="space-y-2">
+                {AVAILABILITY_OPTIONS.map((option) => (
+                  <div key={option.value} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={option.value}
+                      checked={selectedAvailability.includes(option.value)}
+                      onCheckedChange={(checked) => 
+                        handleAvailabilityChange(option.value, checked as boolean)
+                      }
+                    />
+                    <label 
+                      htmlFor={option.value}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {option.label}
+                    </label>
+                  </div>
                 ))}
               </div>
             </div>
-            <div className="mt-6 text-center">
+            <div className="mt-6 flex justify-between">
+              <Button 
+                variant="outline" 
+                onClick={clearAvailabilityFilter}
+                disabled={selectedAvailability.length === 0}
+              >
+                Clear All
+              </Button>
               <Button onClick={() => setShowAvailabilityModal(false)}>
-                Close
+                Apply Filter
               </Button>
             </div>
           </div>

@@ -131,10 +131,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User routes
   app.get("/api/users", async (req, res) => {
     try {
-      const { search } = req.query;
+      const { search, availability } = req.query;
+      
+      // Handle availability filter (can be multiple values)
+      let availabilityFilter: string[] | undefined;
+      if (availability) {
+        availabilityFilter = Array.isArray(availability) ? availability as string[] : [availability as string];
+      }
+      
       const users = await storage.searchUsers(
-        search as string,
-        req.session.userId
+        search as string, 
+        req.session.userId,
+        availabilityFilter
       );
       res.json({ users });
     } catch (error) {

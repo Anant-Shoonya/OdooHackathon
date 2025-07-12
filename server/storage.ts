@@ -30,7 +30,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined>;
   getUserWithSkills(id: number): Promise<UserWithSkills | undefined>;
-  searchUsers(query?: string, excludeUserId?: number): Promise<UserWithSkills[]>;
+  searchUsers(query?: string, excludeUserId?: number, availabilityFilter?: string[]): Promise<UserWithSkills[]>;
 
   // Skill operations
   createSkill(skill: InsertSkill): Promise<Skill>;
@@ -127,20 +127,20 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async searchUsers(query?: string, excludeUserId?: number): Promise<UserWithSkills[]> {
+  async searchUsers(query?: string, excludeUserId?: number, availabilityFilter?: string[]): Promise<UserWithSkills[]> {
     const userList = await db
       .select()
       .from(users)
       .limit(20);
 
     // Filter out excluded user if specified
-    const filteredUsers = excludeUserId
+    const initialFilteredUsers = excludeUserId 
       ? userList.filter(user => user.id !== excludeUserId)
       : userList;
 
     // Get skills and availability for each user
     const usersWithSkills = await Promise.all(
-      filteredUsers.map(async (user) => {
+      initialFilteredUsers.map(async (user) => {
         const userSkills = await db
           .select()
           .from(skills)
@@ -181,16 +181,28 @@ export class DatabaseStorage implements IStorage {
       })
     );
 
-    // If there's a query, filter by skills
+    // Apply filters
+    let filteredUsers = usersWithSkills;
+
+    // Filter by search query (skills)
     if (query) {
-      return usersWithSkills.filter(user =>
-        user.skillsOffered.some(skill =>
+      filteredUsers = filteredUsers.filter(user => 
+        user.skillsOffered.some(skill => 
           skill.name.toLowerCase().includes(query.toLowerCase())
         )
       );
     }
 
-    return usersWithSkills;
+    // Filter by availability if specified
+    if (availabilityFilter && availabilityFilter.length > 0) {
+      filteredUsers = filteredUsers.filter(user => 
+        user.availability.some(avail => 
+          availabilityFilter.includes(avail.timeSlot)
+        )
+      );
+    }
+
+    return filteredUsers;
   }
 
   async createSkill(skill: InsertSkill): Promise<Skill> {

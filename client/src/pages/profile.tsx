@@ -14,10 +14,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const AVAILABILITY_OPTIONS = [
-  "weekends",
-  "evenings", 
   "weekday-mornings",
-  "weekday-afternoons"
+  "weekday-afternoons", 
+  "weekday-evenings",
+  "weekend-mornings",
+  "weekend-afternoons",
+  "weekend-evenings"
 ];
 
 export default function Profile() {
@@ -30,10 +32,12 @@ export default function Profile() {
     skillsOffered: [] as string[],
     skillsWanted: [] as string[],
     availability: [] as string[],
+    profilePicture: "",
   });
   
   const [newSkillOffered, setNewSkillOffered] = useState("");
   const [newSkillWanted, setNewSkillWanted] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const { data: currentUser, isLoading } = useQuery({
     queryKey: ["/api/auth/me"],
@@ -52,6 +56,7 @@ export default function Profile() {
         skillsOffered: offeredSkills,
         skillsWanted: wantedSkills,
         availability: availabilitySlots,
+        profilePicture: currentUser.profilePicture || "",
       });
     }
   }, [currentUser]);
@@ -130,6 +135,62 @@ export default function Profile() {
     updateProfileMutation.mutate(formData);
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Simple file size check (2MB limit)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please choose an image under 2MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please choose an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64String = reader.result as string;
+        setFormData({ ...formData, profilePicture: base64String });
+        setIsUploading(false);
+        toast({
+          title: "Image uploaded",
+          description: "Profile picture updated successfully.",
+        });
+      };
+      reader.onerror = () => {
+        setIsUploading(false);
+        toast({
+          title: "Upload failed",
+          description: "Failed to process the image.",
+          variant: "destructive",
+        });
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      setIsUploading(false);
+      toast({
+        title: "Upload failed",
+        description: "An error occurred while uploading the image.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!currentUser && !isLoading) {
     setLocation("/login");
     return null;
@@ -158,6 +219,36 @@ export default function Profile() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Profile Picture */}
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Profile Picture</Label>
+                  <div className="flex items-center space-x-4">
+                    <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                      {formData.profilePicture ? (
+                        <img
+                          src={formData.profilePicture}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-slate-500 text-xs">No Image</div>
+                      )}
+                    </div>
+                    <div>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        disabled={isUploading}
+                        className="max-w-xs"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        {isUploading ? "Uploading..." : "Choose an image under 2MB"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Basic Info */}
                 <div className="space-y-4">
                   <div>
@@ -254,8 +345,8 @@ export default function Profile() {
                             handleAvailabilityChange(option, checked as boolean)
                           }
                         />
-                        <Label htmlFor={option} className="text-sm capitalize">
-                          {option.replace('-', ' ')}
+                        <Label htmlFor={option} className="text-sm">
+                          {option.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </Label>
                       </div>
                     ))}
