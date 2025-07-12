@@ -1,45 +1,27 @@
-# HackToHell Setup Guide
+# Skill Swap Platform
 
-## ✅ Backend Setup
+## Team Name: 404 Found
 
-1. Created `backend/` folder
-2. In backend, Ran:
-   npm init -y
-   npm install express mongoose cors dotenv
-   npm install --save-dev nodemon
+## Problem Statement:
 
-3. Created folder structure:
-   backend/
-   ├── index.js
-   ├── .env
-   ├── routes/
-   ├── controllers/
-   ├── models/
-   ├── middleware/
-   ├── utils/
+Develop a Skill Swap Platform — a mini application that enables users to list their skills and request others in return.
 
-4. Scripts added in `package.json`:
-   "scripts": {
-   "start": "node index.js",
-   "dev": "nodemon index.js"
-   }
+## Features:
 
-5. To run backend:
-   npm run dev
+- Basic info: Name, location (optional), profile photo (optional)
+- List of skills offered
+- List of skills wanted
+- Availability (e.g., weekends, evenings)
+- User can make their profile public or private.
+- Users can browse or search others by skill (e.g., “Photoshop” or “Excel”)
 
----
+### Request & Accept Swaps:
 
-## ✅ Frontend Setup
+- Accept or reject swap offers
+- Show current and pending swap requests
+- Ratings or feedback after a swap
+- The user is also able to delete the swap request if it is not accepted.
 
-1. Created `frontend/` folder
-2. In frontend, Ran:
-   npm create vite@latest .
+## Email:
 
-3. During prompts:
-
-- Select React
-- Select JavaScript
-
-4. Then:
-   npm install
-   npm run dev
+businesshandle618@gmail.com
