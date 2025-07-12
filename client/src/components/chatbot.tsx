@@ -43,7 +43,7 @@ export default function Chatbot() {
     setTimeout(() => {
       const botResponse: ChatMessage = {
         id: Date.now() + 1,
-        text: "Thank you for your message! Our AI assistant is currently being set up. Please check back soon for intelligent responses to help you with skill swapping.",
+        text: "To swap skills, go to a user profile and click 'Request Swap'.",
         isUser: false,
         timestamp: new Date(),
       };
