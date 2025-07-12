@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, MessageCircle, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import Navbar from "@/components/navbar";
+import ChatModal from "@/components/chat-modal";
+import FeedbackModal from "@/components/feedback-modal";
 import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -34,6 +36,8 @@ export default function Requests() {
   const [, setLocation] = useLocation();
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedChatRequest, setSelectedChatRequest] = useState<SwapRequest | null>(null);
+  const [selectedFeedbackRequest, setSelectedFeedbackRequest] = useState<SwapRequest | null>(null);
   const { toast } = useToast();
 
   const { data: currentUser } = useQuery({
@@ -50,6 +54,31 @@ export default function Requests() {
       if (!response.ok) throw new Error("Failed to fetch requests");
       return response.json();
     },
+  });
+
+  // Query to check review status for each accepted request
+  const { data: reviewStatusData } = useQuery({
+    queryKey: ["/api/reviews/status", requestsData?.requests],
+    queryFn: async () => {
+      if (!requestsData?.requests) return {};
+      
+      const acceptedRequests = requestsData.requests.filter((req: SwapRequest) => req.status === "accepted");
+      const statusPromises = acceptedRequests.map(async (req: SwapRequest) => {
+        const response = await fetch(`/api/reviews/check/${req.id}`, {
+          credentials: "include",
+        });
+        if (!response.ok) return { requestId: req.id, hasReviewed: false };
+        const data = await response.json();
+        return { requestId: req.id, hasReviewed: data.hasReviewed };
+      });
+      
+      const results = await Promise.all(statusPromises);
+      return results.reduce((acc, result) => {
+        acc[result.requestId] = result.hasReviewed;
+        return acc;
+      }, {} as Record<number, boolean>);
+    },
+    enabled: !!requestsData?.requests,
   });
 
   const updateRequestMutation = useMutation({
@@ -238,6 +267,36 @@ export default function Requests() {
                             Reject
                           </Button>
                         </div>
+                      ) : request.status === "accepted" ? (
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSelectedChatRequest(request)}
+                              className="flex items-center space-x-1"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                              <span>Chat with {request.requester.name}</span>
+                            </Button>
+                          </div>
+                          <div>
+                            {reviewStatusData?.[request.id] ? (
+                              <div className="text-sm text-green-600 font-medium">
+                                ✓ Feedback provided
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => setSelectedFeedbackRequest(request)}
+                                className="flex items-center space-x-1 bg-amber-600 hover:bg-amber-700"
+                              >
+                                <Star className="w-4 h-4" />
+                                <span>Give Feedback</span>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       ) : (
                         <div className="text-sm text-slate-500">
                           {formatDate(request.createdAt)}
@@ -251,6 +310,28 @@ export default function Requests() {
           )}
         </div>
       </div>
+
+      {/* Chat Modal */}
+      {selectedChatRequest && currentUser && (
+        <ChatModal
+          isOpen={!!selectedChatRequest}
+          onClose={() => setSelectedChatRequest(null)}
+          swapRequestId={selectedChatRequest.id}
+          otherUserName={selectedChatRequest.requester.name}
+          currentUserId={currentUser.id}
+        />
+      )}
+
+      {/* Feedback Modal */}
+      {selectedFeedbackRequest && (
+        <FeedbackModal
+          isOpen={!!selectedFeedbackRequest}
+          onClose={() => setSelectedFeedbackRequest(null)}
+          swapRequestId={selectedFeedbackRequest.id}
+          revieweeId={selectedFeedbackRequest.requesterId}
+          revieweeName={selectedFeedbackRequest.requester.name}
+        />
+      )}
     </div>
   );
 }

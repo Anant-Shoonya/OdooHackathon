@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search } from "lucide-react";
+import { Search, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Navbar from "@/components/navbar";
 import UserCard from "@/components/user-card";
 import SwapRequestModal from "@/components/swap-request-modal";
+import Chatbot from "@/components/chatbot";
 import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,6 +27,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserWithSkills | null>(null);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const { toast } = useToast();
 
   const { data: currentUser } = useQuery({
@@ -52,6 +55,8 @@ export default function Home() {
         description: "Please login to check availability and request swaps.",
         variant: "destructive",
       });
+    } else {
+      setShowAvailabilityModal(true);
     }
   };
 
@@ -126,19 +131,21 @@ export default function Home() {
           ) : (
             <>
               <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {usersData?.users?.map((user: UserWithSkills) => (
-                  <UserCard
-                    key={user.id}
-                    user={user}
-                    matchScore={calculateMatchScore(user)}
-                    onRequestSwap={() => handleRequestSwap(user)}
-                    onViewProfile={() => setLocation(`/profile/${user.id}`)}
-                    isLoggedIn={!!currentUser}
-                  />
-                ))}
+                {usersData?.users
+                  ?.filter((user: UserWithSkills) => user.id !== currentUser?.id)
+                  ?.map((user: UserWithSkills) => (
+                    <UserCard
+                      key={user.id}
+                      user={user}
+                      matchScore={calculateMatchScore(user)}
+                      onRequestSwap={() => handleRequestSwap(user)}
+                      onViewProfile={() => setLocation(`/profile/${user.id}`)}
+                      isLoggedIn={!!currentUser}
+                    />
+                  ))}
               </div>
 
-              {usersData?.users?.length === 0 && (
+              {usersData?.users?.filter((user: UserWithSkills) => user.id !== currentUser?.id)?.length === 0 && (
                 <div className="text-center py-12">
                   <div className="text-slate-600">No users found matching your search.</div>
                 </div>
@@ -157,6 +164,43 @@ export default function Home() {
           onClose={() => setShowSwapModal(false)}
         />
       )}
+
+      {/* Availability Modal */}
+      <Dialog open={showAvailabilityModal} onOpenChange={setShowAvailabilityModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Your Availability</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600 mb-4">
+              Set your availability to let others know when you're free for skill swaps.
+            </p>
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-slate-700">Available time slots:</div>
+              <div className="grid grid-cols-2 gap-2">
+                {['Weekday Mornings', 'Weekday Afternoons', 'Weekday Evenings', 'Weekend Mornings', 'Weekend Afternoons', 'Weekend Evenings'].map((slot) => (
+                  <Button
+                    key={slot}
+                    variant="outline"
+                    size="sm"
+                    className="text-left justify-start"
+                  >
+                    {slot}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-6 text-center">
+              <Button onClick={() => setShowAvailabilityModal(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Chatbot */}
+      <Chatbot />
     </div>
   );
 }

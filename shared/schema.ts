@@ -41,8 +41,17 @@ export const reviews = pgTable("reviews", {
   id: serial("id").primaryKey(),
   reviewerId: integer("reviewer_id").references(() => users.id).notNull(),
   revieweeId: integer("reviewee_id").references(() => users.id).notNull(),
+  swapRequestId: integer("swap_request_id").references(() => swapRequests.id).notNull(),
   rating: integer("rating").notNull(),
   comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const chats = pgTable("chats", {
+  id: serial("id").primaryKey(),
+  swapRequestId: integer("swap_request_id").references(() => swapRequests.id).notNull(),
+  senderId: integer("sender_id").references(() => users.id).notNull(),
+  message: text("message").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -54,6 +63,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   availability: many(availability),
   reviewsGiven: many(reviews, { relationName: "reviewer" }),
   reviewsReceived: many(reviews, { relationName: "reviewee" }),
+  chatsSent: many(chats),
 }));
 
 export const skillsRelations = relations(skills, ({ one }) => ({
@@ -94,6 +104,21 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
     references: [users.id],
     relationName: "reviewee",
   }),
+  swapRequest: one(swapRequests, {
+    fields: [reviews.swapRequestId],
+    references: [swapRequests.id],
+  }),
+}));
+
+export const chatsRelations = relations(chats, ({ one }) => ({
+  sender: one(users, {
+    fields: [chats.senderId],
+    references: [users.id],
+  }),
+  swapRequest: one(swapRequests, {
+    fields: [chats.swapRequestId],
+    references: [swapRequests.id],
+  }),
 }));
 
 // Insert schemas
@@ -120,6 +145,11 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({
   createdAt: true,
 });
 
+export const insertChatSchema = createInsertSchema(chats).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -131,6 +161,8 @@ export type Availability = typeof availability.$inferSelect;
 export type InsertAvailability = z.infer<typeof insertAvailabilitySchema>;
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Chat = typeof chats.$inferSelect;
+export type InsertChat = z.infer<typeof insertChatSchema>;
 
 // Extended types with relations
 export type UserWithSkills = User & {

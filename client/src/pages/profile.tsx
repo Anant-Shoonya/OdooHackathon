@@ -66,6 +66,7 @@ export default function Profile() {
         description: "Your profile has been updated successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setLocation("/home");
     },
     onError: (error: Error) => {
       toast({

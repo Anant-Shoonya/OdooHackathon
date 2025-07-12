@@ -241,6 +241,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Chat routes
+  app.get("/api/chats/:swapRequestId", requireAuth, async (req, res) => {
+    try {
+      const swapRequestId = parseInt(req.params.swapRequestId);
+      const messages = await storage.getChatMessages(swapRequestId);
+      res.json({ messages });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/chats", requireAuth, async (req, res) => {
+    try {
+      const { swapRequestId, message } = req.body;
+      const senderId = req.session.userId!;
+
+      const chatMessage = await storage.createChatMessage({
+        swapRequestId,
+        senderId,
+        message,
+      });
+
+      res.json({ message: chatMessage });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Review routes
+  app.post("/api/reviews", requireAuth, async (req, res) => {
+    try {
+      const { revieweeId, swapRequestId, rating, comment } = req.body;
+      const reviewerId = req.session.userId!;
+
+      // Check if user has already reviewed this swap
+      const hasReviewed = await storage.hasUserReviewedSwap(reviewerId, swapRequestId);
+      if (hasReviewed) {
+        return res.status(400).json({ message: "You have already reviewed this swap" });
+      }
+
+      const review = await storage.createReview({
+        reviewerId,
+        revieweeId,
+        swapRequestId,
+        rating,
+        comment,
+      });
+
+      res.json({ review });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/reviews/check/:swapRequestId", requireAuth, async (req, res) => {
+    try {
+      const swapRequestId = parseInt(req.params.swapRequestId);
+      const reviewerId = req.session.userId!;
+      
+      const hasReviewed = await storage.hasUserReviewedSwap(reviewerId, swapRequestId);
+      res.json({ hasReviewed });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

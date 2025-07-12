@@ -4,6 +4,7 @@ import {
   swapRequests, 
   availability, 
   reviews,
+  chats,
   type User, 
   type InsertUser,
   type UserWithSkills,
@@ -15,7 +16,9 @@ import {
   type Availability,
   type InsertAvailability,
   type Review,
-  type InsertReview
+  type InsertReview,
+  type Chat,
+  type InsertChat
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, desc } from "drizzle-orm";
@@ -45,6 +48,11 @@ export interface IStorage {
   // Review operations
   createReview(review: InsertReview): Promise<Review>;
   getReviewsForUser(userId: number): Promise<Review[]>;
+  hasUserReviewedSwap(reviewerId: number, swapRequestId: number): Promise<boolean>;
+
+  // Chat operations
+  createChatMessage(chat: InsertChat): Promise<Chat>;
+  getChatMessages(swapRequestId: number): Promise<Chat[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -105,12 +113,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchUsers(query?: string, excludeUserId?: number): Promise<UserWithSkills[]> {
-    let whereCondition = excludeUserId ? eq(users.id, excludeUserId) : undefined;
-    
     const userList = await db
       .select()
       .from(users)
-      .where(whereCondition ? eq(users.id, excludeUserId) : undefined)
       .limit(20);
 
     // Filter out excluded user if specified
@@ -171,7 +176,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(skills)
       .where(and(eq(skills.id, id), eq(skills.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   async getSkillsByUser(userId: number): Promise<Skill[]> {
@@ -263,6 +268,31 @@ export class DatabaseStorage implements IStorage {
       .from(reviews)
       .where(eq(reviews.revieweeId, userId))
       .orderBy(desc(reviews.createdAt));
+  }
+
+  async hasUserReviewedSwap(reviewerId: number, swapRequestId: number): Promise<boolean> {
+    const [review] = await db
+      .select()
+      .from(reviews)
+      .where(and(eq(reviews.reviewerId, reviewerId), eq(reviews.swapRequestId, swapRequestId)))
+      .limit(1);
+    return !!review;
+  }
+
+  async createChatMessage(chat: InsertChat): Promise<Chat> {
+    const [newChat] = await db
+      .insert(chats)
+      .values(chat)
+      .returning();
+    return newChat;
+  }
+
+  async getChatMessages(swapRequestId: number): Promise<Chat[]> {
+    return await db
+      .select()
+      .from(chats)
+      .where(eq(chats.swapRequestId, swapRequestId))
+      .orderBy(chats.createdAt);
   }
 }
 
