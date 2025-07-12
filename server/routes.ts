@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
+import { filterReviews } from "./sentiment";
 import bcrypt from "bcrypt";
 import session from "express-session";
 import { insertUserSchema, insertSwapRequestSchema } from "@shared/schema";
@@ -13,6 +15,21 @@ declare module "express-session" {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // WebSocket room management
+  const rooms = new Map<string, Set<WebSocket>>();
+  
+  function broadcastToRoom(roomId: string, data: any) {
+    const clients = rooms.get(roomId);
+    if (clients) {
+      const message = JSON.stringify(data);
+      clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
+        }
+      });
+    }
+  }
+
   // Session configuration
   app.use(session({
     secret: process.env.SESSION_SECRET || 'skillswap-secret',
@@ -132,7 +149,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      res.json({ user });
+
+      // Filter reviews using sentiment analysis
+      const filteredReviews = filterReviews(user.reviewsReceived);
+      
+      res.json({ 
+        user: {
+          ...user,
+          reviewsReceived: filteredReviews
+        }
+      });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
     }
@@ -263,6 +289,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message,
       });
 
+      // Broadcast to WebSocket clients
+      broadcastToRoom(`swap-${swapRequestId}`, {
+        type: 'new_message',
+        message: chatMessage
+      });
+
       res.json({ message: chatMessage });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
@@ -308,5 +340,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // WebSocket setup for real-time chat
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  wss.on('connection', (ws) => {
+    let currentRoom: string | null = null;
+    
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        if (message.type === 'join_room' && message.roomId) {
+          // Leave current room if any
+          if (currentRoom && rooms.has(currentRoom)) {
+            rooms.get(currentRoom)!.delete(ws);
+          }
+          
+          // Join new room
+          const roomId = message.roomId as string;
+          currentRoom = roomId;
+          if (!rooms.has(roomId)) {
+            rooms.set(roomId, new Set());
+          }
+          rooms.get(roomId)!.add(ws);
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    });
+    
+    ws.on('close', () => {
+      if (currentRoom) {
+        if (rooms.has(currentRoom)) {
+          rooms.get(currentRoom)!.delete(ws);
+          if (rooms.get(currentRoom)!.size === 0) {
+            rooms.delete(currentRoom);
+          }
+        }
+      }
+    });
+  });
+  
   return httpServer;
 }

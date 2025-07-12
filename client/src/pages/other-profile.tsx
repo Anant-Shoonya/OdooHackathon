@@ -21,7 +21,11 @@ interface UserProfile {
     id: number;
     rating: number;
     comment: string;
-    reviewer: { name: string };
+    reviewer: { 
+      id: number;
+      name: string;
+      email: string;
+    };
   }>;
 }
 

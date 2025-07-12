@@ -98,8 +98,22 @@ export class DatabaseStorage implements IStorage {
       .where(eq(availability.userId, id));
 
     const userReviews = await db
-      .select()
+      .select({
+        id: reviews.id,
+        reviewerId: reviews.reviewerId,
+        revieweeId: reviews.revieweeId,
+        swapRequestId: reviews.swapRequestId,
+        rating: reviews.rating,
+        comment: reviews.comment,
+        createdAt: reviews.createdAt,
+        reviewer: {
+          id: users.id,
+          name: users.name,
+          email: users.email
+        }
+      })
       .from(reviews)
+      .leftJoin(users, eq(reviews.reviewerId, users.id))
       .where(eq(reviews.revieweeId, id))
       .orderBy(desc(reviews.createdAt))
       .limit(5);
@@ -137,8 +151,22 @@ export class DatabaseStorage implements IStorage {
           .where(eq(availability.userId, user.id));
 
         const userReviews = await db
-          .select()
+          .select({
+            id: reviews.id,
+            reviewerId: reviews.reviewerId,
+            revieweeId: reviews.revieweeId,
+            swapRequestId: reviews.swapRequestId,
+            rating: reviews.rating,
+            comment: reviews.comment,
+            createdAt: reviews.createdAt,
+            reviewer: {
+              id: users.id,
+              name: users.name,
+              email: users.email
+            }
+          })
           .from(reviews)
+          .leftJoin(users, eq(reviews.reviewerId, users.id))
           .where(eq(reviews.revieweeId, user.id))
           .orderBy(desc(reviews.createdAt))
           .limit(3);

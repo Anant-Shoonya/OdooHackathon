@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,73 @@ export default function ChatModal({
   currentUserId,
 }: ChatModalProps) {
   const [newMessage, setNewMessage] = useState("");
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // WebSocket connection
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsConnected(true);
+        // Join the room for this swap request
+        ws.send(JSON.stringify({
+          type: 'join_room',
+          roomId: `swap-${swapRequestId}`
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'new_message') {
+            // Invalidate and refetch messages
+            queryClient.invalidateQueries({ queryKey: ["/api/chats", swapRequestId] });
+          }
+        } catch (error) {
+          console.error('WebSocket message error:', error);
+        }
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setWsConnected(false);
+      };
+
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
+    }
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [isOpen, swapRequestId]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollElement) {
+        scrollElement.scrollTop = scrollElement.scrollHeight;
+      }
+    }
+  });
 
   const { data: messagesData, isLoading } = useQuery({
     queryKey: ["/api/chats", swapRequestId],
@@ -99,7 +165,7 @@ export default function ChatModal({
         </DialogHeader>
         
         <div className="flex-1 flex flex-col">
-          <ScrollArea className="flex-1 p-4">
+          <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
             {isLoading ? (
               <div className="text-center py-8">
                 <div className="text-slate-600">Loading messages...</div>
