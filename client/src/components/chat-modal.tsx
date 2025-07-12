@@ -1,19 +1,17 @@
+// Top unchanged imports
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface ChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  swapRequestId: number;
   otherUserName: string;
   currentUserId: number;
+  swapRequestId: number; // still passed but unused here
 }
 
 interface ChatMessage {
@@ -26,70 +24,26 @@ interface ChatMessage {
 export default function ChatModal({
   isOpen,
   onClose,
-  swapRequestId,
   otherUserName,
-  currentUserId,
+  currentUserId
 }: ChatModalProps) {
-  const [newMessage, setNewMessage] = useState("");
-  const [wsConnected, setWsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
-
-  // WebSocket connection
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setWsConnected(true);
-        // Join the room for this swap request
-        ws.send(JSON.stringify({
-          type: 'join_room',
-          roomId: `swap-${swapRequestId}`
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'new_message') {
-            // Invalidate and refetch messages
-            queryClient.invalidateQueries({ queryKey: ["/api/chats", swapRequestId] });
-          }
-        } catch (error) {
-          console.error('WebSocket message error:', error);
-        }
-      };
-
-      ws.onclose = () => {
-        setWsConnected(false);
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setWsConnected(false);
-      };
-
-    } catch (error) {
-      console.error('WebSocket connection error:', error);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 1,
+      senderId: currentUserId,
+      message: "Hey! I'm interested in your dancing skills.",
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 2,
+      senderId: 999, // assume 999 is the other user
+      message: "Sure! I can teach you some basic steps.",
+      createdAt: new Date().toISOString()
     }
+  ]);
+  const [newMessage, setNewMessage] = useState("");
 
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [isOpen, swapRequestId]);
-
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -97,52 +51,42 @@ export default function ChatModal({
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }
     }
-  });
+  }, [messages]);
 
-  const { data: messagesData, isLoading } = useQuery({
-    queryKey: ["/api/chats", swapRequestId],
-    queryFn: async () => {
-      const response = await fetch(`/api/chats/${swapRequestId}`, {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to fetch messages");
-      return response.json();
-    },
-    enabled: isOpen,
-  });
-
-  const sendMessageMutation = useMutation({
-    mutationFn: async (message: string) => {
-      return apiRequest("POST", "/api/chats", {
-        swapRequestId,
-        message,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chats", swapRequestId] });
-      setNewMessage("");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to send message",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-    
-    sendMessageMutation.mutate(newMessage.trim());
-  };
+    const msg = newMessage.trim();
+    if (!msg) return;
 
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+    const newId = messages.length + 1;
+
+    const userMessage: ChatMessage = {
+      id: newId,
+      senderId: currentUserId,
+      message: msg,
+      createdAt: new Date().toISOString()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setNewMessage("");
+
+    // Simulate reply from other user after 2s
+    setTimeout(() => {
+      const reply: ChatMessage = {
+        id: newId + 1,
+        senderId: 999,
+        message: "Thanks for the message! Let's schedule a session.",
+        createdAt: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, reply]);
+    }, 2000);
   };
 
   return (
@@ -163,54 +107,38 @@ export default function ChatModal({
             </Button>
           </div>
         </DialogHeader>
-        
+
         <div className="flex-1 flex flex-col">
           <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-            {isLoading ? (
-              <div className="text-center py-8">
-                <div className="text-slate-600">Loading messages...</div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {messagesData?.messages?.map((message: ChatMessage) => (
+            <div className="space-y-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.senderId === currentUserId ? "justify-end" : "justify-start"}`}
+                >
                   <div
-                    key={message.id}
-                    className={`flex ${
-                      message.senderId === currentUserId ? 'justify-end' : 'justify-start'
+                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                      message.senderId === currentUserId
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-800"
                     }`}
                   >
-                    <div
-                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    <p className="text-sm">{message.message}</p>
+                    <p
+                      className={`text-xs mt-1 ${
                         message.senderId === currentUserId
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-800'
+                          ? "text-blue-100"
+                          : "text-slate-500"
                       }`}
                     >
-                      <p className="text-sm">{message.message}</p>
-                      <p
-                        className={`text-xs mt-1 ${
-                          message.senderId === currentUserId 
-                            ? 'text-blue-100' 
-                            : 'text-slate-500'
-                        }`}
-                      >
-                        {formatTime(message.createdAt)}
-                      </p>
-                    </div>
+                      {formatTime(message.createdAt)}
+                    </p>
                   </div>
-                ))}
-                
-                {messagesData?.messages?.length === 0 && (
-                  <div className="text-center py-8">
-                    <div className="text-slate-600">
-                      No messages yet. Start the conversation!
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </ScrollArea>
-          
+
           <form
             onSubmit={handleSendMessage}
             className="p-4 border-t bg-slate-50 flex space-x-3"
@@ -220,11 +148,10 @@ export default function ChatModal({
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
               className="flex-1"
-              disabled={sendMessageMutation.isPending}
             />
-            <Button 
-              type="submit" 
-              disabled={!newMessage.trim() || sendMessageMutation.isPending}
+            <Button
+              type="submit"
+              disabled={!newMessage.trim()}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Send className="w-4 h-4" />
