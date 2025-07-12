@@ -17,7 +17,7 @@ declare module "express-session" {
 export async function registerRoutes(app: Express): Promise<Server> {
   // WebSocket room management
   const rooms = new Map<string, Set<WebSocket>>();
-  
+
   function broadcastToRoom(roomId: string, data: any) {
     const clients = rooms.get(roomId);
     if (clients) {
@@ -54,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/signup", async (req, res) => {
     try {
       const { email, password, name } = insertUserSchema.parse(req.body);
-      
+
       // Check if user exists
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
@@ -63,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
-      
+
       // Create user
       const user = await storage.createUser({
         email,
@@ -81,7 +81,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
+
       const user = await storage.getUserByEmail(email);
       if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });
@@ -115,16 +115,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json({ 
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
         location: user.location,
         profilePicture: user.profilePicture,
         skillsOffered: user.skillsOffered,
         availability: user.availability
-      } 
+      }
     });
   });
 
@@ -133,7 +133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { search } = req.query;
       const users = await storage.searchUsers(
-        search as string, 
+        search as string,
         req.session.userId
       );
       res.json({ users });
@@ -152,8 +152,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Filter reviews using sentiment analysis
       const filteredReviews = filterReviews(user.reviewsReceived);
-      
-      res.json({ 
+
+      res.json({
         user: {
           ...user,
           reviewsReceived: filteredReviews
@@ -239,12 +239,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/swap-requests", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
-      const requests = await storage.getSwapRequestsForUser(userId);
-      res.json({ requests });
+      const received = await storage.getSwapRequestsForUser(userId);
+      const sent = await storage.getSwapRequestsSentByUser(userId);
+
+      res.json({ received, sent });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
     }
   });
+
 
   app.put("/api/swap-requests/:id", requireAuth, async (req, res) => {
     try {
@@ -331,7 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const swapRequestId = parseInt(req.params.swapRequestId);
       const reviewerId = req.session.userId!;
-      
+
       const hasReviewed = await storage.hasUserReviewedSwap(reviewerId, swapRequestId);
       res.json({ hasReviewed });
     } catch (error) {
@@ -340,23 +343,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
-  
+
   // WebSocket setup for real-time chat
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  
+
   wss.on('connection', (ws) => {
     let currentRoom: string | null = null;
-    
+
     ws.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
-        
+
         if (message.type === 'join_room' && message.roomId) {
           // Leave current room if any
           if (currentRoom && rooms.has(currentRoom)) {
             rooms.get(currentRoom)!.delete(ws);
           }
-          
+
           // Join new room
           const roomId = message.roomId as string;
           currentRoom = roomId;
@@ -369,7 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('WebSocket message error:', error);
       }
     });
-    
+
     ws.on('close', () => {
       if (currentRoom) {
         if (rooms.has(currentRoom)) {
@@ -381,6 +384,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   });
-  
+
   return httpServer;
 }

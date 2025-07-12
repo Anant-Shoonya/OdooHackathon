@@ -1,11 +1,11 @@
-import { 
-  users, 
-  skills, 
-  swapRequests, 
-  availability, 
+import {
+  users,
+  skills,
+  swapRequests,
+  availability,
   reviews,
   chats,
-  type User, 
+  type User,
   type InsertUser,
   type UserWithSkills,
   type SwapRequestWithUsers,
@@ -40,6 +40,7 @@ export interface IStorage {
   // Swap request operations
   createSwapRequest(request: InsertSwapRequest): Promise<SwapRequest>;
   getSwapRequestsForUser(userId: number): Promise<SwapRequestWithUsers[]>;
+  getSwapRequestsSentByUser(userId: number): Promise<SwapRequestWithUsers[]>;
   updateSwapRequestStatus(id: number, status: string, userId: number): Promise<SwapRequest | undefined>;
 
   // Availability operations
@@ -133,7 +134,7 @@ export class DatabaseStorage implements IStorage {
       .limit(20);
 
     // Filter out excluded user if specified
-    const filteredUsers = excludeUserId 
+    const filteredUsers = excludeUserId
       ? userList.filter(user => user.id !== excludeUserId)
       : userList;
 
@@ -182,8 +183,8 @@ export class DatabaseStorage implements IStorage {
 
     // If there's a query, filter by skills
     if (query) {
-      return usersWithSkills.filter(user => 
-        user.skillsOffered.some(skill => 
+      return usersWithSkills.filter(user =>
+        user.skillsOffered.some(skill =>
           skill.name.toLowerCase().includes(query.toLowerCase())
         )
       );
@@ -261,6 +262,46 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getSwapRequestsSentByUser(userId: number): Promise<SwapRequestWithUsers[]> {
+    const requests = await db
+      .select({
+        id: swapRequests.id,
+        requesterId: swapRequests.requesterId,
+        targetId: swapRequests.targetId,
+        offeredSkill: swapRequests.offeredSkill,
+        requestedSkill: swapRequests.requestedSkill,
+        message: swapRequests.message,
+        status: swapRequests.status,
+        createdAt: swapRequests.createdAt,
+        targetName: users.name,
+        targetEmail: users.email,
+        targetProfilePicture: users.profilePicture,
+      })
+      .from(swapRequests)
+      .innerJoin(users, eq(swapRequests.targetId, users.id))
+      .where(eq(swapRequests.requesterId, userId))
+      .orderBy(desc(swapRequests.createdAt));
+
+    return requests.map(req => ({
+      id: req.id,
+      requesterId: req.requesterId,
+      targetId: req.targetId,
+      offeredSkill: req.offeredSkill,
+      requestedSkill: req.requestedSkill,
+      message: req.message,
+      status: req.status,
+      createdAt: req.createdAt,
+      requester: { id: userId } as User,
+      target: {
+        id: req.targetId,
+        name: req.targetName,
+        email: req.targetEmail,
+        profilePicture: req.targetProfilePicture,
+      } as User,
+    }));
+  }
+
+
   async updateSwapRequestStatus(id: number, status: string, userId: number): Promise<SwapRequest | undefined> {
     const [updatedRequest] = await db
       .update(swapRequests)
@@ -273,7 +314,7 @@ export class DatabaseStorage implements IStorage {
   async setAvailability(userId: number, timeSlots: string[]): Promise<void> {
     // Delete existing availability
     await db.delete(availability).where(eq(availability.userId, userId));
-    
+
     // Insert new availability
     if (timeSlots.length > 0) {
       await db.insert(availability).values(
